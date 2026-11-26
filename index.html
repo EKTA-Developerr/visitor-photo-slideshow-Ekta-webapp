@@ -364,6 +364,9 @@
         `;
         imgBtn.addEventListener('click', () => {
           currentIdx = idx;
+          isFinished = false;
+          isPaused = false;
+          pauseBtn.textContent = 'Pause';
           remainingSeconds = slideSeconds;
           renderSlide();
         });
