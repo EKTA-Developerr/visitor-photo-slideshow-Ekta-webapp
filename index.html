@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Visitor Photo Slideshow — Web App</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <style>
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+    .slide-layer {
+      transition: opacity 0.75s cubic-bezier(0.22, 1, 0.36, 1),
+                  transform 0.85s cubic-bezier(0.22, 1, 0.36, 1);
+      will-change: opacity, transform;
+    }
+    .slide-active {
+      opacity: 1;
+      transform: scale(1);
+      z-index: 2;
+    }
+    .slide-inactive {
+      opacity: 0;
+      transform: scale(1.02);
+      z-index: 1;
+    }
+  </style>
+</head>
+<body class="bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-950 via-slate-950 to-black text-slate-100 min-h-screen flex flex-col">
+
+  <!-- Top WebApp Navigation Bar -->
+  <header class="sticky top-0 z-30 bg-slate-950/80 backdrop-blur-xl border-b border-white/10">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-600/30">
+          VP
+        </div>
+        <div>
+          <div class="text-sm sm:text-base font-bold text-white leading-tight">Visitor Photo Slideshow</div>
+          <div class="text-[11px] text-slate-400 hidden sm:block">Live Event Check-In &amp; Smart TV Display</div>
+        </div>
+      </div>
+
+      <nav class="flex items-center gap-2">
+        <button id="navUpload" type="button"
+          class="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-600/25 transition">
+          Upload Photo
+        </button>
+        <button id="navDisplay" type="button"
+          class="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold text-slate-300 hover:bg-white/10 border border-white/10 transition">
+          TV Display (<span id="queueCount">1</span>)
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Content Area -->
+  <main class="flex-1 w-full max-w-6xl mx-auto p-4 sm:p-6 flex flex-col justify-center">
+
+    <!-- Upload View -->
+    <section id="viewUpload" class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <!-- Upload Form Card -->
+      <div class="lg:col-span-7 bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl">
+        <div class="flex items-start justify-between gap-3 mb-6">
+          <div>
+            <h1 class="text-2xl font-bold bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
+              Event Photo Check-In
+            </h1>
+            <p class="text-xs sm:text-sm text-slate-400 mt-1">
+              Share your photos to the live TV slideshow. Returning visitors are recognized automatically.
+            </p>
+          </div>
+          <button id="goToDisplayBtn" type="button"
+            class="shrink-0 text-xs px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-blue-200 font-semibold border border-white/10 transition">
+            Watch TV &rarr;
+          </button>
+        </div>
+
+        <form id="uploadForm" class="space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label for="visitorName" class="block text-xs font-semibold text-slate-300 mb-1.5">Your Name</label>
+              <input id="visitorName" type="text" placeholder="e.g., Alex" required
+                class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-white/10 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
+            </div>
+            <div>
+              <label for="visitorId" class="block text-xs font-semibold text-slate-300 mb-1.5">Email or Phone (Unique ID)</label>
+              <input id="visitorId" type="text" placeholder="e.g., alex@example.com" required
+                class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-white/10 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
+            </div>
+          </div>
+
+          <div>
+            <label for="photoInput" class="block text-xs font-semibold text-slate-300 mb-1.5">Select Photos (JPG, PNG, WebP · max 5 MB each)</label>
+            <input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp" multiple required
+              class="w-full text-xs sm:text-sm text-slate-300 bg-slate-950/60 border border-white/10 rounded-xl p-2.5 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-600/25 file:text-blue-300 hover:file:bg-blue-600/35 cursor-pointer" />
+          </div>
+
+          <label class="flex items-start gap-3 text-xs sm:text-sm text-slate-300 bg-slate-950/60 p-4 rounded-2xl border border-white/10 cursor-pointer hover:border-white/20 transition">
+            <input id="consentCheck" type="checkbox" required class="mt-0.5 accent-blue-500" />
+            <span>I agree to display my uploaded photos and first name on the public TV screen. (My email/phone stays private.)</span>
+          </label>
+
+          <button type="submit"
+            class="w-full py-3 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold text-sm shadow-lg shadow-blue-600/25 transition">
+            Upload to Slideshow
+          </button>
+        </form>
+
+        <div id="uploadMsg" class="hidden mt-4 text-xs sm:text-sm p-3.5 rounded-2xl"></div>
+      </div>
+
+      <!-- Quick Info & Stats Sidebar -->
+      <aside class="lg:col-span-5 space-y-4">
+        <div class="bg-slate-900/70 border border-white/10 rounded-3xl p-6 space-y-4">
+          <h2 class="text-sm font-bold uppercase tracking-wider text-blue-300">Live Event Stats</h2>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="bg-slate-950/70 border border-white/10 rounded-2xl p-4">
+              <div class="text-2xl font-bold text-white" id="statPhotos">1</div>
+              <div class="text-xs text-slate-400 mt-0.5">Photos in Queue</div>
+            </div>
+            <div class="bg-slate-950/70 border border-white/10 rounded-2xl p-4">
+              <div class="text-2xl font-bold text-emerald-400" id="statVisitors">1</div>
+              <div class="text-xs text-slate-400 mt-0.5">Unique Visitors</div>
+            </div>
+          </div>
+          <ul class="text-xs text-slate-300 space-y-2 pt-2 border-t border-white/10">
+            <li>• Use <span class="font-mono text-blue-300">demo@visitor.com</span> to test returning visitor recognition.</li>
+            <li>• Re-uploading the exact same photo triggers duplicate protection + a revisit popup.</li>
+            <li>• Photos are saved locally in your browser so they stay even if you refresh.</li>
+          </ul>
+          <button id="resetDemoBtn" type="button"
+            class="w-full py-2 rounded-xl text-xs font-medium text-slate-300 bg-white/5 hover:bg-white/10 border border-white/10 transition">
+            Reset Saved Demo Data
+          </button>
+        </div>
+      </aside>
+    </section>
+
+    <!-- TV Display View -->
+    <section id="viewDisplay" class="hidden space-y-4">
+      <!-- Top Controls Bar -->
+      <div class="bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-2xl px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+        <button id="backToUploadBtn" type="button"
+          class="text-xs sm:text-sm px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold border border-white/15 flex items-center gap-1.5 transition">
+          &larr; Upload Page
+        </button>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <label for="durationSelect" class="text-xs text-slate-400 font-medium">Slide Time:</label>
+          <select id="durationSelect"
+            class="text-xs bg-slate-950 border border-white/15 text-slate-100 rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-blue-500">
+            <option value="3">3 sec</option>
+            <option value="5">5 sec</option>
+            <option value="8" selected>8 sec</option>
+            <option value="12">12 sec</option>
+            <option value="15">15 sec</option>
+          </select>
+          <button id="pauseBtn" type="button"
+            class="text-xs px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 transition">
+            Pause
+          </button>
+          <button id="nextSlideBtn" type="button"
+            class="text-xs px-3 py-1.5 rounded-xl bg-blue-600/25 hover:bg-blue-600/40 text-blue-200 border border-blue-500/30 transition">
+            Next &rarr;
+          </button>
+          <button id="fullscreenBtn" type="button"
+            class="text-xs px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-100 border border-white/15 transition">
+            Fullscreen
+          </button>
+        </div>
+      </div>
+
+      <!-- Widescreen TV Stage -->
+      <div id="tvStage" class="relative bg-black rounded-3xl border border-white/10 overflow-hidden h-[58vh] min-h-[340px] flex items-center justify-center shadow-2xl">
+        <img id="slideImgA" src="" alt="Slideshow photo A" class="absolute inset-0 m-auto max-h-full max-w-full object-contain slide-layer slide-active" />
+        <img id="slideImgB" src="" alt="Slideshow photo B" class="absolute inset-0 m-auto max-h-full max-w-full object-contain slide-layer slide-inactive" />
+
+        <!-- Top-right Live Countdown Pill -->
+        <div class="z-10 absolute top-4 right-4 px-3 py-1 rounded-full bg-black/65 border border-white/15 text-xs font-medium text-emerald-300 flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="countdownLabel">Next in 8s</span>
+        </div>
+
+        <!-- Bottom Caption: Name only, no blur box -->
+        <div class="z-10 absolute bottom-4 left-5 pointer-events-none">
+          <div id="slideName" class="text-lg sm:text-xl font-bold text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)]"></div>
+        </div>
+      </div>
+
+      <!-- Bottom Thumbnail Strip -->
+      <div class="bg-slate-900/75 border border-white/10 rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-2.5">
+          <span class="text-xs font-semibold text-slate-300">All Uploaded Photos (<span id="slideCounter">Slide 1 of 1</span>)</span>
+          <span class="text-[11px] text-slate-400">Click any photo to view</span>
+        </div>
+        <div id="thumbStrip" class="flex gap-3 overflow-x-auto pb-1"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Revisit / Duplicate Popup Modal -->
+  <div id="revisitModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-sm bg-slate-900 border border-blue-500/40 rounded-2xl p-5 shadow-2xl space-y-3">
+      <div class="flex items-center gap-2.5">
+        <span class="w-8 h-8 rounded-full bg-blue-600/25 text-blue-300 flex items-center justify-center text-sm font-bold">!</span>
+        <h2 id="modalTitle" class="text-base font-bold text-white">Revisit Detected</h2>
+      </div>
+      <p id="modalBody" class="text-xs text-slate-300 leading-relaxed"></p>
+      <button id="closeModalBtn" type="button"
+        class="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition">
+        OK, Got It
+      </button>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'visitor_photo_slideshow_webapp_v1';
+    const SEED_SVG = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="450" viewBox="0 0 800 450">' +
+      '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1e3a8a"/><stop offset="100%" stop-color="#0f172a"/></linearGradient></defs>' +
+      '<rect width="800" height="450" fill="url(#g)"/>' +
+      '<circle cx="400" cy="190" r="76" fill="#3b82f6" opacity="0.35"/>' +
+      '<text x="400" y="200" text-anchor="middle" fill="#e2e8f0" font-family="sans-serif" font-size="30" font-weight="bold">Demo Visitor Memory</text>' +
+      '<text x="400" y="245" text-anchor="middle" fill="#94a3b8" font-family="sans-serif" font-size="18">demo@visitor.com · Previous Visit</text>' +
+      '</svg>'
+    );
+
+    let visitors = { 'demo@visitor.com': { name: 'Demo Guest', hashes: ['seed-demo-hash'] } };
+    let queue = [{ name: 'Demo Guest', identifier: 'demo@visitor.com', src: SEED_SVG, time: 'Earlier today', isReturning: true }];
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.visitors && Array.isArray(parsed.queue) && parsed.queue.length > 0) {
+          visitors = parsed.visitors;
+          queue = parsed.queue;
+        }
+      } catch (_) {}
+    }
+
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ visitors, queue }));
+      } catch (_) {}
+    }
+
+    loadState();
+
+    let currentIdx = 0;
+    let slideSeconds = 8;
+    let remainingSeconds = 8;
+    let isPaused = false;
+    let activeLayer = 'A';
+
+    const navUpload = document.getElementById('navUpload');
+    const navDisplay = document.getElementById('navDisplay');
+    const viewUpload = document.getElementById('viewUpload');
+    const viewDisplay = document.getElementById('viewDisplay');
+    const queueCount = document.getElementById('queueCount');
+    const statPhotos = document.getElementById('statPhotos');
+    const statVisitors = document.getElementById('statVisitors');
+    const uploadForm = document.getElementById('uploadForm');
+    const uploadMsg = document.getElementById('uploadMsg');
+    const durationSelect = document.getElementById('durationSelect');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const countdownLabel = document.getElementById('countdownLabel');
+    const thumbStrip = document.getElementById('thumbStrip');
+    const revisitModal = document.getElementById('revisitModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalBody = document.getElementById('modalBody');
+    const slideImgA = document.getElementById('slideImgA');
+    const slideImgB = document.getElementById('slideImgB');
+
+    function normalizeId(raw) {
+      const s = raw.trim().toLowerCase();
+      if (!s.includes('@')) {
+        const digits = s.replace(/\D/g, '');
+        if (digits.length >= 7) return digits;
+      }
+      return s;
+    }
+
+    async function sha256File(file) {
+      const buf = await file.arrayBuffer();
+      const digest = await crypto.subtle.digest('SHA-256', buf);
+      return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function updateStats() {
+      queueCount.textContent = String(queue.length);
+      statPhotos.textContent = String(queue.length);
+      statVisitors.textContent = String(Object.keys(visitors).length);
+    }
+
+    function showRevisitPopup(title, body) {
+      modalTitle.textContent = title;
+      modalBody.textContent = body;
+      revisitModal.classList.remove('hidden');
+    }
+
+    function showView(mode) {
+      const isUpload = mode === 'upload';
+      viewUpload.classList.toggle('hidden', !isUpload);
+      viewDisplay.classList.toggle('hidden', isUpload);
+      navUpload.className = isUpload
+        ? 'px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-600/25 transition'
+        : 'px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold text-slate-300 hover:bg-white/10 border border-white/10 transition';
+      navDisplay.className = !isUpload
+        ? 'px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-600/25 transition'
+        : 'px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold text-slate-300 hover:bg-white/10 border border-white/10 transition';
+      if (!isUpload) renderSlide();
+    }
+
+    function renderThumbnails() {
+      thumbStrip.innerHTML = '';
+      queue.forEach((item, idx) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        const active = idx === currentIdx;
+        btn.className = `shrink-0 w-24 rounded-xl overflow-hidden border transition-all duration-300 text-left ${
+          active ? 'border-blue-400 ring-2 ring-blue-500/40 bg-slate-800 scale-[1.03]' : 'border-white/10 bg-slate-950/70 opacity-75 hover:opacity-100'
+        }`;
+        btn.innerHTML = `
+          <img src="${item.src}" alt="${item.name}" class="w-full h-14 object-cover" />
+          <div class="px-2 py-1 text-[11px] font-medium text-slate-200 truncate">${item.name}</div>
+        `;
+        btn.addEventListener('click', () => {
+          currentIdx = idx;
+          remainingSeconds = slideSeconds;
+          renderSlide();
+        });
+        thumbStrip.appendChild(btn);
+      });
+    }
+
+    function updateCountdownUI() {
+      countdownLabel.textContent = isPaused ? 'Paused' : `Next in ${remainingSeconds}s`;
+    }
+
+    function crossfadeTo(src) {
+      const currentEl = activeLayer === 'A' ? slideImgA : slideImgB;
+      const nextEl = activeLayer === 'A' ? slideImgB : slideImgA;
+
+      if (currentEl.getAttribute('src') === src) {
+        currentEl.classList.remove('slide-inactive');
+        currentEl.classList.add('slide-active');
+        return;
+      }
+
+      const applySwap = () => {
+        nextEl.classList.remove('slide-inactive');
+        nextEl.classList.add('slide-active');
+        currentEl.classList.remove('slide-active');
+        currentEl.classList.add('slide-inactive');
+        activeLayer = activeLayer === 'A' ? 'B' : 'A';
+      };
+
+      nextEl.onload = applySwap;
+      nextEl.src = src;
+      if (nextEl.complete) applySwap();
+    }
+
+    function renderSlide() {
+      if (!queue.length) return;
+      if (currentIdx >= queue.length) currentIdx = 0;
+      const item = queue[currentIdx];
+
+      crossfadeTo(item.src);
+      document.getElementById('slideName').textContent = item.name;
+      document.getElementById('slideCounter').textContent = `Slide ${currentIdx + 1} of ${queue.length}`;
+      updateStats();
+      updateCountdownUI();
+      renderThumbnails();
+    }
+
+    function nextSlide() {
+      if (!queue.length) return;
+      currentIdx = (currentIdx + 1) % queue.length;
+      remainingSeconds = slideSeconds;
+      renderSlide();
+    }
+
+    function showStatus(text, isError) {
+      uploadMsg.textContent = text;
+      uploadMsg.className = isError
+        ? 'mt-4 text-xs sm:text-sm p-3.5 rounded-2xl bg-red-500/15 text-red-300 border border-red-500/30'
+        : 'mt-4 text-xs sm:text-sm p-3.5 rounded-2xl bg-emerald-500/15 text-emerald-300 border border-emerald-500/30';
+    }
+
+    navUpload.addEventListener('click', () => showView('upload'));
+    navDisplay.addEventListener('click', () => showView('display'));
+    document.getElementById('backToUploadBtn').addEventListener('click', () => showView('upload'));
+    document.getElementById('goToDisplayBtn').addEventListener('click', () => showView('display'));
+    document.getElementById('nextSlideBtn').addEventListener('click', nextSlide);
+    document.getElementById('closeModalBtn').addEventListener('click', () => revisitModal.classList.add('hidden'));
+
+    document.getElementById('fullscreenBtn').addEventListener('click', () => {
+      const stage = document.getElementById('tvStage');
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      } else if (stage.requestFullscreen) {
+        stage.requestFullscreen().catch(() => {});
+      }
+    });
+
+    document.getElementById('resetDemoBtn').addEventListener('click', () => {
+      visitors = { 'demo@visitor.com': { name: 'Demo Guest', hashes: ['seed-demo-hash'] } };
+      queue = [{ name: 'Demo Guest', identifier: 'demo@visitor.com', src: SEED_SVG, time: 'Earlier today', isReturning: true }];
+      currentIdx = 0;
+      saveState();
+      updateStats();
+      renderSlide();
+      showStatus('Demo data has been reset.', false);
+    });
+
+    durationSelect.addEventListener('change', () => {
+      slideSeconds = parseInt(durationSelect.value, 10) || 8;
+      remainingSeconds = slideSeconds;
+      updateCountdownUI();
+    });
+
+    pauseBtn.addEventListener('click', () => {
+      isPaused = !isPaused;
+      pauseBtn.textContent = isPaused ? 'Resume' : 'Pause';
+      updateCountdownUI();
+    });
+
+    uploadForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('visitorName').value.trim();
+      const rawId = document.getElementById('visitorId').value;
+      const id = normalizeId(rawId);
+      const files = Array.from(document.getElementById('photoInput').files || []);
+      const consent = document.getElementById('consentCheck').checked;
+
+      if (!name || !id || !consent || !files.length) {
+        showStatus('Please enter your name, email/phone, consent, and select at least one photo.', true);
+        return;
+      }
+
+      const isReturning = Boolean(visitors[id]);
+      if (!visitors[id]) {
+        visitors[id] = { name, hashes: [] };
+      } else {
+        visitors[id].name = name;
+      }
+
+      let added = 0;
+      let duplicates = 0;
+
+      for (const file of files) {
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+          showStatus(`Invalid file "${file.name}". Only JPG, PNG, and WebP images are allowed.`, true);
+          return;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+          showStatus(`"${file.name}" exceeds the 5 MB size limit.`, true);
+          return;
+        }
+        const hash = await sha256File(file);
+        if (visitors[id].hashes.includes(hash)) {
+          duplicates += 1;
+          continue;
+        }
+        visitors[id].hashes.push(hash);
+        const dataUrl = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.readAsDataURL(file);
+        });
+        queue.unshift({
+          name,
+          identifier: id,
+          src: dataUrl,
+          time: 'Just now',
+          isReturning
+        });
+        added += 1;
+      }
+
+      saveState();
+      updateStats();
+      currentIdx = 0;
+      remainingSeconds = slideSeconds;
+
+      if (added === 0 && duplicates > 0) {
+        const msg = `Welcome back, ${name}! This is a revisit (${id}), and ${duplicates} duplicate photo(s) were skipped because they are already in the slideshow.`;
+        showStatus(msg, true);
+        showRevisitPopup('Revisit & Duplicate Photo Detected', msg);
+      } else {
+        const notes = [`Uploaded ${added} new photo(s) for ${name}.`];
+        if (isReturning) {
+          notes.push('Welcome back! Your previous photos are also in the TV slideshow.');
+        }
+        if (duplicates > 0) {
+          notes.push(`${duplicates} duplicate photo(s) skipped.`);
+        }
+        const fullMsg = notes.join(' ');
+        showStatus(fullMsg, false);
+        if (isReturning) {
+          showRevisitPopup('Welcome Back — Revisit Detected!', fullMsg);
+        }
+        uploadForm.reset();
+        renderSlide();
+      }
+    });
+
+    setInterval(() => {
+      if (viewDisplay.classList.contains('hidden') || isPaused || queue.length === 0) return;
+      remainingSeconds -= 1;
+      if (remainingSeconds <= 0) {
+        nextSlide();
+      } else {
+        updateCountdownUI();
+      }
+    }, 1000);
+
+    updateStats();
+    renderSlide();
+  </script>
+</body>
+</html>
