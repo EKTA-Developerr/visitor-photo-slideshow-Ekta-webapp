@@ -261,6 +261,7 @@
     let slideSeconds = 8;
     let remainingSeconds = 8;
     let isPaused = false;
+    let isFinished = false;
     let activeLayer = 'A';
     let targetEditId = null;
     let targetDeleteId = null;
@@ -391,7 +392,11 @@
     }
 
     function updateCountdownUI() {
-      countdownLabel.textContent = isPaused ? 'Paused' : `Next in ${remainingSeconds}s`;
+      if (isFinished) {
+        countdownLabel.textContent = 'Slideshow Finished';
+      } else {
+        countdownLabel.textContent = isPaused ? 'Paused' : `Next in ${remainingSeconds}s`;
+      }
     }
 
     function crossfadeTo(src) {
@@ -456,7 +461,15 @@
 
     function nextSlide() {
       if (!queue.length) return;
-      currentIdx = (currentIdx + 1) % queue.length;
+      if (currentIdx >= queue.length - 1) {
+        isFinished = true;
+        isPaused = true;
+        pauseBtn.textContent = 'Replay';
+        updateCountdownUI();
+        return;
+      }
+      isFinished = false;
+      currentIdx += 1;
       remainingSeconds = slideSeconds;
       renderSlide();
     }
@@ -535,6 +548,15 @@
     });
 
     pauseBtn.addEventListener('click', () => {
+      if (isFinished) {
+        isFinished = false;
+        isPaused = false;
+        currentIdx = 0;
+        remainingSeconds = slideSeconds;
+        pauseBtn.textContent = 'Pause';
+        renderSlide();
+        return;
+      }
       isPaused = !isPaused;
       pauseBtn.textContent = isPaused ? 'Resume' : 'Pause';
       updateCountdownUI();
@@ -568,8 +590,12 @@
         const isReturning = Boolean(data.is_returning);
 
         await fetchSlideshow();
+        isFinished = false;
+        isPaused = false;
+        pauseBtn.textContent = 'Pause';
         currentIdx = 0;
         remainingSeconds = slideSeconds;
+        renderSlide();
 
         if (added === 0 && duplicates > 0) {
           const msg = `Welcome back, ${name}! This is a revisit, and ${duplicates} duplicate photo(s) were skipped because they are already in the slideshow.`;
