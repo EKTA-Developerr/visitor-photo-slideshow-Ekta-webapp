@@ -1,16 +1,14 @@
-# Visitor Photo Slideshow (WebApp)
+# Visitor Photo Slideshow (WebApp + SQLite Database)
 
-A responsive, zero-backend **HTML/CSS/JavaScript WebApp** for event photo check-ins and live Smart TV slideshow displays.
-
-## Features
-- **Visitor Upload Form**: Name, unique email/phone ID, privacy consent checkbox, and multi-photo upload (JPG, PNG, WebP up to 5 MB).
-- **Returning Visitor & Duplicate Protection**: Normalizes email/phone IDs and hashes photos with SHA-256 (`crypto.subtle.digest`) to detect revisits and skip duplicate photos with a clear popup modal.
-- **TV Display & Fullscreen Mode**: Crisp double-buffered crossfade slideshow, configurable slide timer (3s–15s), Pause/Resume, and a clickable thumbnail strip of all uploaded photos.
-- **Persistent Browser Storage**: Uses `localStorage` so uploaded photos and visitor records persist across page reloads.
+A responsive **HTML/Tailwind/JS WebApp** backed by **PHP 8+ & SQLite** for multi-user event photo check-ins and live Smart TV slideshow displays.
 
 ## Setup & Run
-Open `index.html` directly in any modern browser, or serve locally:
-```bash
-python3 -m http.server 8000
-```
-Then visit `http://localhost:8000`.
+1. Start PHP's built-in server (or place the folder in XAMPP `htdocs/`):
+   ```bash
+   php -S localhost:8000
+   ```
+2. Open `http://localhost:8000/index.html` in your browser.
+3. Run automated tests:
+   ```bash
+   php tests/test_runner.php
+   ```

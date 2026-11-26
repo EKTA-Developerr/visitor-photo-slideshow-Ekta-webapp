@@ -254,6 +254,605 @@
   </div>
 
   <script>
+    let queue = [];
+    let visitorCount = 0;
+
+    let currentIdx = 0;
+    let slideSeconds = 8;
+    let remainingSeconds = 8;
+    let isPaused = false;
+    let activeLayer = 'A';
+    let targetEditId = null;
+    let targetDeleteId = null;
+
+    const navUpload = document.getElementById('navUpload');
+    const navDisplay = document.getElementById('navDisplay');
+    const viewUpload = document.getElementById('viewUpload');
+    const viewDisplay = document.getElementById('viewDisplay');
+    const queueCount = document.getElementById('queueCount');
+    const statPhotos = document.getElementById('statPhotos');
+    const statVisitors = document.getElementById('statVisitors');
+    const uploadForm = document.getElementById('uploadForm');
+    const uploadMsg = document.getElementById('uploadMsg');
+    const durationSelect = document.getElementById('durationSelect');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const countdownLabel = document.getElementById('countdownLabel');
+    const countdownPill = document.getElementById('countdownPill');
+    const emptyState = document.getElementById('emptyState');
+    const thumbStrip = document.getElementById('thumbStrip');
+    const revisitModal = document.getElementById('revisitModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalBody = document.getElementById('modalBody');
+    const deleteModal = document.getElementById('deleteModal');
+    const deleteModalBody = document.getElementById('deleteModalBody');
+    const replaceFileInput = document.getElementById('replaceFileInput');
+    const slideImgA = document.getElementById('slideImgA');
+    const slideImgB = document.getElementById('slideImgB');
+
+    function updateStats() {
+      queueCount.textContent = String(queue.length);
+      statPhotos.textContent = String(queue.length);
+      statVisitors.textContent = String(visitorCount);
+    }
+
+    async function fetchSlideshow() {
+      try {
+        const res = await fetch('api/slideshow.php');
+        const data = await res.json();
+        queue = (data.items || []).map(item => ({
+          id: item.id,
+          name: item.visitor_name,
+          src: item.url,
+          isReturning: item.is_returning,
+          time: item.created_at
+        }));
+        visitorCount = data.visitor_count ?? 0;
+        updateStats();
+        renderSlide();
+      } catch (_) {}
+    }
+
+    function showRevisitPopup(title, body) {
+      modalTitle.textContent = title;
+      modalBody.textContent = body;
+      revisitModal.classList.remove('hidden');
+    }
+
+    function requestDelete(idx) {
+      if (!queue[idx]) return;
+      targetDeleteId = queue[idx].id;
+      deleteModalBody.textContent = `Are you sure you want to delete ${queue[idx].name}'s photo from the slideshow?`;
+      deleteModal.classList.remove('hidden');
+    }
+
+    function requestReplace(idx) {
+      if (!queue[idx]) return;
+      targetEditId = queue[idx].id;
+      replaceFileInput.value = '';
+      replaceFileInput.click();
+    }
+
+    function showView(mode) {
+      const isUpload = mode === 'upload';
+      viewUpload.classList.toggle('hidden', !isUpload);
+      viewDisplay.classList.toggle('hidden', isUpload);
+      navUpload.className = isUpload
+        ? 'px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-600/25 transition'
+        : 'px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold text-slate-300 hover:bg-white/10 border border-white/10 transition';
+      navDisplay.className = !isUpload
+        ? 'px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-600/25 transition'
+        : 'px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold text-slate-300 hover:bg-white/10 border border-white/10 transition';
+      if (!isUpload) renderSlide();
+    }
+
+    function renderThumbnails() {
+      thumbStrip.innerHTML = '';
+      queue.forEach((item, idx) => {
+        const card = document.createElement('div');
+        const active = idx === currentIdx;
+        card.className = `shrink-0 w-28 rounded-xl overflow-hidden border transition-all duration-300 ${
+          active ? 'border-blue-400 ring-2 ring-blue-500/40 bg-slate-800 scale-[1.02]' : 'border-white/10 bg-slate-950/70 opacity-85 hover:opacity-100'
+        }`;
+
+        const imgBtn = document.createElement('button');
+        imgBtn.type = 'button';
+        imgBtn.className = 'w-full text-left block';
+        imgBtn.innerHTML = `
+          <img src="${item.src}" alt="${item.name}" class="w-full h-14 object-cover" />
+          <div class="px-2 pt-1 text-[11px] font-medium text-slate-200 truncate">${item.name}</div>
+        `;
+        imgBtn.addEventListener('click', () => {
+          currentIdx = idx;
+          remainingSeconds = slideSeconds;
+          renderSlide();
+        });
+
+        const actions = document.createElement('div');
+        actions.className = 'flex items-center justify-between gap-1 px-1.5 py-1.5';
+
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'flex-1 text-[10px] py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/35 text-amber-200 font-medium transition';
+        editBtn.textContent = 'Change';
+        editBtn.addEventListener('click', () => requestReplace(idx));
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'flex-1 text-[10px] py-0.5 rounded bg-red-500/20 hover:bg-red-500/35 text-red-200 font-medium transition';
+        delBtn.textContent = 'Delete';
+        delBtn.addEventListener('click', () => requestDelete(idx));
+
+        actions.appendChild(editBtn);
+        actions.appendChild(delBtn);
+        card.appendChild(imgBtn);
+        card.appendChild(actions);
+        thumbStrip.appendChild(card);
+      });
+    }
+
+    function updateCountdownUI() {
+      countdownLabel.textContent = isPaused ? 'Paused' : `Next in ${remainingSeconds}s`;
+    }
+
+    function crossfadeTo(src) {
+      const currentEl = activeLayer === 'A' ? slideImgA : slideImgB;
+      const nextEl = activeLayer === 'A' ? slideImgB : slideImgA;
+
+      if (currentEl.getAttribute('src') === src) {
+        currentEl.classList.remove('slide-inactive');
+        currentEl.classList.add('slide-active');
+        return;
+      }
+
+      let swapped = false;
+      const applySwap = () => {
+        if (swapped) return;
+        swapped = true;
+        nextEl.onload = null;
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            nextEl.classList.remove('slide-inactive');
+            nextEl.classList.add('slide-active');
+            currentEl.classList.remove('slide-active');
+            currentEl.classList.add('slide-inactive');
+            activeLayer = activeLayer === 'A' ? 'B' : 'A';
+          });
+        });
+      };
+
+      currentEl.onload = null;
+      nextEl.classList.remove('slide-active');
+      nextEl.classList.add('slide-inactive');
+      nextEl.onload = applySwap;
+      nextEl.src = src;
+      if (nextEl.complete) applySwap();
+    }
+
+    function renderSlide() {
+      const hasItems = queue.length > 0;
+      emptyState.classList.toggle('hidden', hasItems);
+      countdownPill.classList.toggle('hidden', !hasItems);
+      slideImgA.classList.toggle('hidden', !hasItems);
+      slideImgB.classList.toggle('hidden', !hasItems);
+
+      if (!hasItems) {
+        document.getElementById('slideName').textContent = '';
+        document.getElementById('slideCounter').textContent = '0 of 0';
+        updateStats();
+        renderThumbnails();
+        return;
+      }
+
+      if (currentIdx >= queue.length) currentIdx = 0;
+      const item = queue[currentIdx];
+
+      crossfadeTo(item.src);
+      document.getElementById('slideName').textContent = item.name;
+      document.getElementById('slideCounter').textContent = `Slide ${currentIdx + 1} of ${queue.length}`;
+      updateStats();
+      updateCountdownUI();
+      renderThumbnails();
+    }
+
+    function nextSlide() {
+      if (!queue.length) return;
+      currentIdx = (currentIdx + 1) % queue.length;
+      remainingSeconds = slideSeconds;
+      renderSlide();
+    }
+
+    function showStatus(text, isError) {
+      uploadMsg.textContent = text;
+      uploadMsg.className = isError
+        ? 'mt-4 text-xs sm:text-sm p-3.5 rounded-2xl bg-red-500/15 text-red-300 border border-red-500/30'
+        : 'mt-4 text-xs sm:text-sm p-3.5 rounded-2xl bg-emerald-500/15 text-emerald-300 border border-emerald-500/30';
+    }
+
+    navUpload.addEventListener('click', () => showView('upload'));
+    navDisplay.addEventListener('click', () => showView('display'));
+    document.getElementById('backToUploadBtn').addEventListener('click', () => showView('upload'));
+    document.getElementById('goToDisplayBtn').addEventListener('click', () => showView('display'));
+    document.getElementById('emptyUploadBtn').addEventListener('click', () => showView('upload'));
+    document.getElementById('nextSlideBtn').addEventListener('click', nextSlide);
+    document.getElementById('changePhotoBtn').addEventListener('click', () => requestReplace(currentIdx));
+    document.getElementById('deletePhotoBtn').addEventListener('click', () => requestDelete(currentIdx));
+    document.getElementById('closeModalBtn').addEventListener('click', () => revisitModal.classList.add('hidden'));
+    document.getElementById('cancelDeleteBtn').addEventListener('click', () => {
+      targetDeleteId = null;
+      deleteModal.classList.add('hidden');
+    });
+
+    document.getElementById('confirmDeleteBtn').addEventListener('click', async () => {
+      if (!targetDeleteId) {
+        deleteModal.classList.add('hidden');
+        return;
+      }
+      const fd = new FormData();
+      fd.append('id', String(targetDeleteId));
+      await fetch('api/delete.php', { method: 'POST', body: fd });
+      targetDeleteId = null;
+      deleteModal.classList.add('hidden');
+      await fetchSlideshow();
+    });
+
+    replaceFileInput.addEventListener('change', async () => {
+      const file = replaceFileInput.files && replaceFileInput.files[0];
+      if (!file || !targetEditId) return;
+
+      const fd = new FormData();
+      fd.append('id', String(targetEditId));
+      fd.append('photo', file);
+      const res = await fetch('api/replace.php', { method: 'POST', body: fd });
+      const data = await res.json();
+      targetEditId = null;
+      if (!res.ok) {
+        showRevisitPopup('Unable to Change Photo', data.error || 'Update failed.');
+        return;
+      }
+      await fetchSlideshow();
+    });
+
+    document.getElementById('fullscreenBtn').addEventListener('click', () => {
+      const stage = document.getElementById('tvStage');
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      } else if (stage.requestFullscreen) {
+        stage.requestFullscreen().catch(() => {});
+      }
+    });
+
+    document.getElementById('resetDemoBtn').addEventListener('click', async () => {
+      await fetch('api/reset.php', { method: 'POST' });
+      currentIdx = 0;
+      await fetchSlideshow();
+      showStatus('Database has been reset.', false);
+    });
+
+    durationSelect.addEventListener('change', () => {
+      slideSeconds = parseInt(durationSelect.value, 10) || 8;
+      remainingSeconds = slideSeconds;
+      updateCountdownUI();
+    });
+
+    pauseBtn.addEventListener('click', () => {
+      isPaused = !isPaused;
+      pauseBtn.textContent = isPaused ? 'Resume' : 'Pause';
+      updateCountdownUI();
+    });
+
+    uploadForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('visitorName').value.trim();
+      const identifier = document.getElementById('visitorId').value.trim();
+      const files = Array.from(document.getElementById('photoInput').files || []);
+      const consent = document.getElementById('consentCheck').checked;
+
+      if (!name || !identifier || !consent || !files.length) {
+        showStatus('Please enter your name, email/phone, consent, and select at least one photo.', true);
+        return;
+      }
+
+      const fd = new FormData();
+      fd.append('name', name);
+      fd.append('identifier', identifier);
+      fd.append('consent', 'true');
+      files.forEach(f => fd.append('photos[]', f));
+
+      try {
+        const res = await fetch('api/upload.php', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Upload failed.');
+
+        const added = data.saved_count || 0;
+        const duplicates = data.skipped_duplicates || 0;
+        const isReturning = Boolean(data.is_returning);
+
+        await fetchSlideshow();
+        currentIdx = 0;
+        remainingSeconds = slideSeconds;
+
+        if (added === 0 && duplicates > 0) {
+          const msg = `Welcome back, ${name}! This is a revisit, and ${duplicates} duplicate photo(s) were skipped because they are already in the slideshow.`;
+          showStatus(msg, true);
+          showRevisitPopup('Revisit & Duplicate Photo Detected', msg);
+        } else {
+          const notes = [`Uploaded ${added} new photo(s) for ${name}.`];
+          if (isReturning) notes.push('Welcome back! Your previous photos are also in the TV slideshow.');
+          if (duplicates > 0) notes.push(`${duplicates} duplicate photo(s) skipped.`);
+          const fullMsg = notes.join(' ');
+          showStatus(fullMsg, false);
+          if (isReturning) {
+            showRevisitPopup('Welcome Back — Revisit Detected!', fullMsg);
+          }
+          uploadForm.reset();
+        }
+      } catch (err) {
+        showStatus(err.message, true);
+      }
+    });
+
+    setInterval(fetchSlideshow, 4000);
+    setInterval(() => {
+      if (viewDisplay.classList.contains('hidden') || isPaused || queue.length === 0) return;
+      remainingSeconds -= 1;
+      if (remainingSeconds <= 0) {
+        nextSlide();
+      } else {
+        updateCountdownUI();
+      }
+    }, 1000);
+
+    fetchSlideshow();
+  </script>
+  <style>
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+    .slide-layer {
+      transition: opacity 0.9s cubic-bezier(0.4, 0, 0.2, 1),
+                  transform 1.1s cubic-bezier(0.22, 1, 0.36, 1);
+      will-change: opacity, transform;
+    }
+    .slide-active {
+      opacity: 1;
+      transform: scale(1);
+      z-index: 2;
+    }
+    .slide-inactive {
+      opacity: 0;
+      transform: scale(1.03);
+      z-index: 1;
+    }
+  </style>
+</head>
+<body class="bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-950 via-slate-950 to-black text-slate-100 min-h-screen flex flex-col">
+
+  <!-- Top WebApp Navigation Bar -->
+  <header class="sticky top-0 z-30 bg-slate-950/80 backdrop-blur-xl border-b border-white/10">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-600/30">
+          VP
+        </div>
+        <div>
+          <div class="text-sm sm:text-base font-bold text-white leading-tight">Visitor Photo Slideshow</div>
+          <div class="text-[11px] text-slate-400 hidden sm:block">Live Event Check-In &amp; Smart TV Display</div>
+        </div>
+      </div>
+
+      <nav class="flex items-center gap-2">
+        <button id="navUpload" type="button"
+          class="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-600/25 transition">
+          Upload Photo
+        </button>
+        <button id="navDisplay" type="button"
+          class="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold text-slate-300 hover:bg-white/10 border border-white/10 transition">
+          TV Display (<span id="queueCount">1</span>)
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Content Area -->
+  <main class="flex-1 w-full max-w-6xl mx-auto p-4 sm:p-6 flex flex-col justify-center">
+
+    <!-- Upload View -->
+    <section id="viewUpload" class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <!-- Upload Form Card -->
+      <div class="lg:col-span-7 bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl">
+        <div class="flex items-start justify-between gap-3 mb-6">
+          <div>
+            <h1 class="text-2xl font-bold bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
+              Event Photo Check-In
+            </h1>
+            <p class="text-xs sm:text-sm text-slate-400 mt-1">
+              Share your photos to the live TV slideshow. Returning visitors are recognized automatically.
+            </p>
+          </div>
+          <button id="goToDisplayBtn" type="button"
+            class="shrink-0 text-xs px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-blue-200 font-semibold border border-white/10 transition">
+            Watch TV &rarr;
+          </button>
+        </div>
+
+        <form id="uploadForm" class="space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label for="visitorName" class="block text-xs font-semibold text-slate-300 mb-1.5">Your Name</label>
+              <input id="visitorName" type="text" placeholder="e.g., Alex" required
+                class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-white/10 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
+            </div>
+            <div>
+              <label for="visitorId" class="block text-xs font-semibold text-slate-300 mb-1.5">Email or Phone (Unique ID)</label>
+              <input id="visitorId" type="text" placeholder="e.g., alex@example.com" required
+                class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-white/10 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
+            </div>
+          </div>
+
+          <div>
+            <label for="photoInput" class="block text-xs font-semibold text-slate-300 mb-1.5">Select Photos (JPG, PNG, WebP · max 5 MB each)</label>
+            <input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp" multiple required
+              class="w-full text-xs sm:text-sm text-slate-300 bg-slate-950/60 border border-white/10 rounded-xl p-2.5 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-600/25 file:text-blue-300 hover:file:bg-blue-600/35 cursor-pointer" />
+          </div>
+
+          <label class="flex items-start gap-3 text-xs sm:text-sm text-slate-300 bg-slate-950/60 p-4 rounded-2xl border border-white/10 cursor-pointer hover:border-white/20 transition">
+            <input id="consentCheck" type="checkbox" required class="mt-0.5 accent-blue-500" />
+            <span>I agree to display my uploaded photos and first name on the public TV screen. (My email/phone stays private.)</span>
+          </label>
+
+          <button type="submit"
+            class="w-full py-3 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold text-sm shadow-lg shadow-blue-600/25 transition">
+            Upload to Slideshow
+          </button>
+        </form>
+
+        <div id="uploadMsg" class="hidden mt-4 text-xs sm:text-sm p-3.5 rounded-2xl"></div>
+      </div>
+
+      <!-- Quick Info & Stats Sidebar -->
+      <aside class="lg:col-span-5 space-y-4">
+        <div class="bg-slate-900/70 border border-white/10 rounded-3xl p-6 space-y-4">
+          <h2 class="text-sm font-bold uppercase tracking-wider text-blue-300">Live Event Stats</h2>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="bg-slate-950/70 border border-white/10 rounded-2xl p-4">
+              <div class="text-2xl font-bold text-white" id="statPhotos">1</div>
+              <div class="text-xs text-slate-400 mt-0.5">Photos in Queue</div>
+            </div>
+            <div class="bg-slate-950/70 border border-white/10 rounded-2xl p-4">
+              <div class="text-2xl font-bold text-emerald-400" id="statVisitors">1</div>
+              <div class="text-xs text-slate-400 mt-0.5">Unique Visitors</div>
+            </div>
+          </div>
+          <ul class="text-xs text-slate-300 space-y-2 pt-2 border-t border-white/10">
+            <li>• Use <span class="font-mono text-blue-300">demo@visitor.com</span> to test returning visitor recognition.</li>
+            <li>• Re-uploading the exact same photo triggers duplicate protection + a revisit popup.</li>
+            <li>• You can change or delete any photo anytime from the TV Display screen.</li>
+          </ul>
+          <button id="resetDemoBtn" type="button"
+            class="w-full py-2 rounded-xl text-xs font-medium text-slate-300 bg-white/5 hover:bg-white/10 border border-white/10 transition">
+            Reset Saved Demo Data
+          </button>
+        </div>
+      </aside>
+    </section>
+
+    <!-- TV Display View -->
+    <section id="viewDisplay" class="hidden space-y-4">
+      <!-- Hidden file input for replacing a photo -->
+      <input id="replaceFileInput" type="file" accept="image/jpeg,image/png,image/webp" class="hidden" />
+
+      <!-- Top Controls Bar -->
+      <div class="bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-2xl px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+        <button id="backToUploadBtn" type="button"
+          class="text-xs sm:text-sm px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold border border-white/15 flex items-center gap-1.5 transition">
+          &larr; Upload Page
+        </button>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <label for="durationSelect" class="text-xs text-slate-400 font-medium">Slide Time:</label>
+          <select id="durationSelect"
+            class="text-xs bg-slate-950 border border-white/15 text-slate-100 rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-blue-500">
+            <option value="3">3 sec</option>
+            <option value="5">5 sec</option>
+            <option value="8" selected>8 sec</option>
+            <option value="12">12 sec</option>
+            <option value="15">15 sec</option>
+          </select>
+          <button id="pauseBtn" type="button"
+            class="text-xs px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 transition">
+            Pause
+          </button>
+          <button id="nextSlideBtn" type="button"
+            class="text-xs px-3 py-1.5 rounded-xl bg-blue-600/25 hover:bg-blue-600/40 text-blue-200 border border-blue-500/30 transition">
+            Next &rarr;
+          </button>
+          <button id="changePhotoBtn" type="button"
+            class="text-xs px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/35 text-amber-200 border border-amber-400/30 transition">
+            Change Photo
+          </button>
+          <button id="deletePhotoBtn" type="button"
+            class="text-xs px-3 py-1.5 rounded-xl bg-red-500/20 hover:bg-red-500/35 text-red-200 border border-red-400/30 transition">
+            Delete Photo
+          </button>
+          <button id="fullscreenBtn" type="button"
+            class="text-xs px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-100 border border-white/15 transition">
+            Fullscreen
+          </button>
+        </div>
+      </div>
+
+      <!-- Widescreen TV Stage -->
+      <div id="tvStage" class="relative bg-black rounded-3xl border border-white/10 overflow-hidden h-[58vh] min-h-[340px] flex items-center justify-center shadow-2xl">
+        <div id="emptyState" class="hidden text-center px-6 space-y-3 z-10">
+          <p class="text-sm text-slate-400">No photos in the slideshow yet.</p>
+          <button id="emptyUploadBtn" type="button"
+            class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition">
+            + Upload a Photo
+          </button>
+        </div>
+
+        <img id="slideImgA" src="" alt="Slideshow photo A" class="absolute inset-0 w-full h-full object-contain bg-black slide-layer slide-active" />
+        <img id="slideImgB" src="" alt="Slideshow photo B" class="absolute inset-0 w-full h-full object-contain bg-black slide-layer slide-inactive" />
+
+        <!-- Top-right Live Countdown Pill -->
+        <div id="countdownPill" class="z-10 absolute top-4 right-4 px-3 py-1 rounded-full bg-black/65 border border-white/15 text-xs font-medium text-emerald-300 flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="countdownLabel">Next in 8s</span>
+        </div>
+
+        <!-- Bottom Caption: Name only, no blur box -->
+        <div class="z-10 absolute bottom-4 left-5 pointer-events-none">
+          <div id="slideName" class="text-lg sm:text-xl font-bold text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)]"></div>
+        </div>
+      </div>
+
+      <!-- Bottom Thumbnail Strip -->
+      <div class="bg-slate-900/75 border border-white/10 rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-2.5">
+          <span class="text-xs font-semibold text-slate-300">All Uploaded Photos (<span id="slideCounter">Slide 1 of 1</span>)</span>
+          <span class="text-[11px] text-slate-400">Click any photo to view, change, or delete</span>
+        </div>
+        <div id="thumbStrip" class="flex gap-3 overflow-x-auto pb-1"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Revisit / Info Popup Modal -->
+  <div id="revisitModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-sm bg-slate-900 border border-blue-500/40 rounded-2xl p-5 shadow-2xl space-y-3">
+      <div class="flex items-center gap-2.5">
+        <span class="w-8 h-8 rounded-full bg-blue-600/25 text-blue-300 flex items-center justify-center text-sm font-bold">!</span>
+        <h2 id="modalTitle" class="text-base font-bold text-white">Revisit Detected</h2>
+      </div>
+      <p id="modalBody" class="text-xs text-slate-300 leading-relaxed"></p>
+      <button id="closeModalBtn" type="button"
+        class="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition">
+        OK, Got It
+      </button>
+    </div>
+  </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div id="deleteModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-sm bg-slate-900 border border-red-500/40 rounded-2xl p-5 shadow-2xl space-y-4">
+      <div>
+        <h2 class="text-base font-bold text-white">Delete This Photo?</h2>
+        <p id="deleteModalBody" class="text-xs text-slate-300 mt-1.5 leading-relaxed">
+          Are you sure you want to remove this photo from the slideshow?
+        </p>
+      </div>
+      <div class="grid grid-cols-2 gap-2.5">
+        <button id="cancelDeleteBtn" type="button"
+          class="py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition">
+          Cancel
+        </button>
+        <button id="confirmDeleteBtn" type="button"
+          class="py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-semibold transition">
+          Yes, Delete
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
     const STORAGE_KEY = 'visitor_photo_slideshow_webapp_v1';
     const SEED_SVG = 'data:image/svg+xml;utf8,' + encodeURIComponent(
       '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="450" viewBox="0 0 800 450">' +
