@@ -190,8 +190,8 @@
           </button>
         </div>
 
-        <img id="slideImgA" src="" alt="Slideshow photo A" class="absolute inset-0 m-auto max-h-full max-w-full object-contain slide-layer slide-active" />
-        <img id="slideImgB" src="" alt="Slideshow photo B" class="absolute inset-0 m-auto max-h-full max-w-full object-contain slide-layer slide-inactive" />
+        <img id="slideImgA" src="" alt="Slideshow photo A" class="absolute inset-0 w-full h-full object-contain bg-black slide-layer slide-active" />
+        <img id="slideImgB" src="" alt="Slideshow photo B" class="absolute inset-0 w-full h-full object-contain bg-black slide-layer slide-inactive" />
 
         <!-- Top-right Live Countdown Pill -->
         <div id="countdownPill" class="z-10 absolute top-4 right-4 px-3 py-1 rounded-full bg-black/65 border border-white/15 text-xs font-medium text-emerald-300 flex items-center gap-1.5">
@@ -433,7 +433,11 @@
         return;
       }
 
+      let swapped = false;
       const applySwap = () => {
+        if (swapped) return;
+        swapped = true;
+        nextEl.onload = null;
         nextEl.classList.remove('slide-inactive');
         nextEl.classList.add('slide-active');
         currentEl.classList.remove('slide-active');
@@ -441,6 +445,7 @@
         activeLayer = activeLayer === 'A' ? 'B' : 'A';
       };
 
+      currentEl.onload = null;
       nextEl.onload = applySwap;
       nextEl.src = src;
       if (nextEl.complete) applySwap();
