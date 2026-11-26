@@ -3,45 +3,46 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
 
-function get_db(?string $dbPath = null): PDO
+function get_db(?string $dbName = null): PDO
 {
-    $path = $dbPath ?? DB_PATH;
-    $dir = dirname($path);
-    if (!is_dir($dir)) {
-        mkdir($dir, 0775, true);
-    }
+    $name = $dbName ?? DB_NAME;
+    $dsn = 'mysql:host=' . DB_HOST . ';dbname=' . $name . ';charset=utf8mb4';
 
-    $pdo = new PDO('sqlite:' . $path, null, null, [
+    return new PDO($dsn, DB_USER, DB_PASS, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
     ]);
-    $pdo->exec('PRAGMA journal_mode=WAL;');
-    $pdo->exec('PRAGMA busy_timeout=15000;');
-    $pdo->exec('PRAGMA foreign_keys=ON;');
-    return $pdo;
 }
 
-function init_db(?string $dbPath = null): void
+function init_db(?string $dbName = null): void
 {
-    $pdo = get_db($dbPath);
-    $pdo->exec("
+    $name = $dbName ?? DB_NAME;
+    $rootPdo = new PDO('mysql:host=' . DB_HOST . ';charset=utf8mb4', DB_USER, DB_PASS, [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+    ]);
+
+    $safeDb = preg_replace('/[^a-zA-Z0-9_]/', '', $name) ?: 'visitor_slideshow';
+    $rootPdo->exec("CREATE DATABASE IF NOT EXISTS `{$safeDb}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
+    $rootPdo->exec("USE `{$safeDb}`;");
+
+    $rootPdo->exec("
         CREATE TABLE IF NOT EXISTS visitors (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            identifier TEXT NOT NULL UNIQUE,
-            consent_given INTEGER NOT NULL DEFAULT 1,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(150) NOT NULL,
+            identifier VARCHAR(255) NOT NULL UNIQUE,
+            consent_given TINYINT(1) NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB;
 
         CREATE TABLE IF NOT EXISTS photos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            visitor_id INTEGER NOT NULL,
-            filename TEXT NOT NULL UNIQUE,
-            file_hash TEXT NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (visitor_id) REFERENCES visitors(id) ON DELETE CASCADE,
-            UNIQUE(visitor_id, file_hash)
-        );
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            visitor_id INT NOT NULL,
+            filename VARCHAR(255) NOT NULL UNIQUE,
+            file_hash CHAR(64) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT fk_visitor FOREIGN KEY (visitor_id) REFERENCES visitors(id) ON DELETE CASCADE,
+            UNIQUE KEY uniq_visitor_hash (visitor_id, file_hash)
+        ) ENGINE=InnoDB;
     ");
 }
 
