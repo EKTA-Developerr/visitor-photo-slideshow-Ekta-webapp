@@ -157,6 +157,10 @@
             <option value="12">12 sec</option>
             <option value="15">15 sec</option>
           </select>
+          <button id="loopBtn" type="button"
+            class="text-xs px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/10 transition">
+            Loop: Off
+          </button>
           <button id="pauseBtn" type="button"
             class="text-xs px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 transition">
             Pause
@@ -262,6 +266,7 @@
     let remainingSeconds = 8;
     let isPaused = false;
     let isFinished = false;
+    let isLoop = false;
     let activeLayer = 'A';
     let targetEditId = null;
     let targetDeleteId = null;
@@ -277,6 +282,7 @@
     const uploadMsg = document.getElementById('uploadMsg');
     const durationSelect = document.getElementById('durationSelect');
     const pauseBtn = document.getElementById('pauseBtn');
+    const loopBtn = document.getElementById('loopBtn');
     const countdownLabel = document.getElementById('countdownLabel');
     const countdownPill = document.getElementById('countdownPill');
     const emptyState = document.getElementById('emptyState');
@@ -465,6 +471,13 @@
     function nextSlide() {
       if (!queue.length) return;
       if (currentIdx >= queue.length - 1) {
+        if (isLoop) {
+          isFinished = false;
+          currentIdx = 0;
+          remainingSeconds = slideSeconds;
+          renderSlide();
+          return;
+        }
         isFinished = true;
         isPaused = true;
         pauseBtn.textContent = 'Replay';
@@ -548,6 +561,22 @@
       slideSeconds = parseInt(durationSelect.value, 10) || 8;
       remainingSeconds = slideSeconds;
       updateCountdownUI();
+    });
+
+    loopBtn.addEventListener('click', () => {
+      isLoop = !isLoop;
+      loopBtn.textContent = isLoop ? 'Loop: On' : 'Loop: Off';
+      loopBtn.className = isLoop
+        ? 'text-xs px-3 py-1.5 rounded-xl bg-emerald-600/25 hover:bg-emerald-600/35 text-emerald-200 border border-emerald-500/40 transition'
+        : 'text-xs px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/10 transition';
+      if (isLoop && isFinished) {
+        isFinished = false;
+        isPaused = false;
+        currentIdx = 0;
+        remainingSeconds = slideSeconds;
+        pauseBtn.textContent = 'Pause';
+        renderSlide();
+      }
     });
 
     pauseBtn.addEventListener('click', () => {
