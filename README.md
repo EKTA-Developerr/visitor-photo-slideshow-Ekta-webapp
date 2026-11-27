@@ -14,7 +14,7 @@ Setup & Run (XAMPP / phpMyAdmin)
 
 Start Apache and MySQL in the XAMPP Control Panel.
 
-Place the project folder inside C:\xampp\htdocs\visitor-photo-slideshow-webapp.
+Place the project folder inside C:\xampp\htdocs\visitor-photo-slideshow-Ekta webapp.
 
 (Optional) Copy .env.example to .env if using custom MySQL credentials (defaults: 127.0.0.1, user root, empty password, database visitor_slideshow).
 
